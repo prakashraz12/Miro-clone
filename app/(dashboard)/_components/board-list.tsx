@@ -1,5 +1,13 @@
 'use client';
 
+import { useQuery } from "convex/react";
+import { EmptyBoards } from "./empty-boards";
+import { EmptyFav } from "./empty-fav";
+import { EmptySearch } from "./empty-search";
+import { api } from "@/convex/_generated/api";
+import { BoardCard } from "../board-card";
+import { NewBoardButton } from "./new-board-button";
+
 interface BoardListProps {
     orgId: string,
     query: {
@@ -12,35 +20,59 @@ export const BoardList = ({
     orgId,
     query
 }: BoardListProps) => {
-    const data = []
+    const data = useQuery(api.api.boards.get, { orgId });
+
+    if (data === undefined) {
+        return (
+            <div>
+                <h2 className="text-3xl">
+                {query.favorites ? "Favorite boards" : "Team boards"}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
+                    <NewBoardButton orgId={orgId} disabled />
+                    <BoardCard.Skeleton/>
+                    <BoardCard.Skeleton/>
+                    <BoardCard.Skeleton/>
+                    <BoardCard.Skeleton/>
+                    <BoardCard.Skeleton/>
+                </div>
+               
+            </div>
+        )
+    }
 
     if (!data?.length && query.search) {
         return (
-            <div>
-                Try searching
-            </div>
+            <EmptySearch />
         )
     }
 
     if (!data?.length && query.favorites) {
         return (
-            <div>
-                No favorites
-            </div>
+            <EmptyFav />
         )
     }
 
     if (!data?.length) {
         return (
-            <div>
-                no board
-            </div>
+            <EmptyBoards />
         )
     }
-    
+
     return (
         <div>
-            {JSON.stringify(query)}
+            <h2 className="text-3xl">
+            {query.favorites ? "Favorite boards" : "Team boards"}
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
+                <NewBoardButton orgId={orgId} />
+                {
+                    data?.map((board) => (
+                        <BoardCard key={board._id} createdAt={board._creationTime} id={board._id} title={board.title} imageUrl={board.ImageUrl} authorId={board.authorId} orgId={board.orgId} isFavorite={true} authorName={board.authorName} />
+                    ))
+                }
+            </div>
         </div>
     )
 }
