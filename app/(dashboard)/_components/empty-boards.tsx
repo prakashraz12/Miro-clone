@@ -4,20 +4,24 @@ import { api } from "@/convex/_generated/api";
 import { useApiMutation } from "@/hook/use-api-mutation";
 import { useOrganization } from "@clerk/nextjs";
 import Image from "next/image";
+import { useRouter } from "next/router";
 import { toast } from "sonner";
 
 
 export const EmptyBoards = () => {
+    const router = useRouter();
     const { organization } = useOrganization();
     const { mutate, pending } = useApiMutation(api.api.board.create);
+
     const onCLick = () => {
         if (!organization) return;
         mutate({
             orgId: organization.id,
             title: "untitled"
         }).then((id)=>{
-            toast.success("Board Created")
-        }).catch((error)=> toast.error("Something went wrong!"))
+            toast.success("Board Created");
+            router.push(`/board/${id}`);
+        }).catch((error)=> toast.error("Something went wrong!"));
     }
 
     return (

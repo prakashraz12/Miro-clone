@@ -9,6 +9,9 @@ import { Footer } from "./footer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Action } from "@/components/action";
 import { MoreHorizontalIcon } from "lucide-react";
+import { useApiMutation } from "@/hook/use-api-mutation";
+import { api } from "@/convex/_generated/api";
+import { toast } from "sonner";
 
 
 interface BoardCardProps {
@@ -23,9 +26,21 @@ interface BoardCardProps {
 }
 
 export const BoardCard = ({ id, authorId, imageUrl, title, createdAt, orgId, isFavorite, authorName }: BoardCardProps) => {
-    const { userId } = useAuth()
+
+    const { mutate: onFavorite, pending: pendingFavorite } = useApiMutation(api.api.board.favorite);
+    const { mutate: unFavorite, pending: pendingUnFavorite } = useApiMutation(api.api.board.unfavorite);
+    const { userId } = useAuth();
     const authorLabel = userId === authorId ? "You" : authorName;
-    const createdAtLabel = formatDistanceToNow(createdAt, { addSuffix: true })
+    const createdAtLabel = formatDistanceToNow(createdAt, { addSuffix: true });
+
+    const toggleFavorite = () => {
+        if (isFavorite) {
+            unFavorite({ id }).catch((e)=> toast.error("Failed to unfavorite."));
+        } else {
+            onFavorite({ id, orgId }).catch((e)=> toast.error("Failed to favorite"));
+        }
+    }
+
     return (
         <Link href={`/board/${id}`}>
             <div className="group aspect-[100/127] border rounded-lg flex flex-col justify-between overflow-hidden">
@@ -34,20 +49,21 @@ export const BoardCard = ({ id, authorId, imageUrl, title, createdAt, orgId, isF
                     <OverLay />
                     <Action id={id} title={title} side="right">
                         <button className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-2 outline-none">
-                           <MoreHorizontalIcon className="text-white opacity-75 hover:opacity-100 transition-opacity"/>
+                            <MoreHorizontalIcon className="text-white opacity-75 hover:opacity-100 transition-opacity" />
                         </button>
                     </Action>
                 </div>
                 <Footer isFavorite={isFavorite} title={title
                 } authorLabel={authorLabel}
                     createdAtLabel={createdAtLabel}
-                    onClick={() => { }} disabled={false} />
+                    onClick={toggleFavorite} disabled={pendingFavorite || pendingUnFavorite} />
 
             </div>
         </Link>
     )
 }
 
+//skelation fpr loading animation
 BoardCard.Skeleton = function BoardCardSkeleton() {
     return (
         <div className=" aspect-[100/127] rounded-lg overflow-hidden">
