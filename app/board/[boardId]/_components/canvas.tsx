@@ -8,12 +8,14 @@ import { Participants } from "./participants";
 import { Toolbar } from "./toolbar";
 
 import { useCanRedo, useCanUndo, useHistory, useMutation, useOthersMapped, useStorage } from "@/liveblocks.config";
-import { Camera, CanvasMode, CanvasState, Color, LayerType, Point } from "@/types/canvas";
+import { Camera, CanvasMode, CanvasState, Color, LayerType, Point, Side, XYWH } from "@/types/canvas";
 import { CursorPresence } from "./cursor-presence";
-import { connectionIdToColor, pointerEventToCanvasPoint } from "@/lib/utils";
+import { connectionIdToColor, pointerEventToCanvasPoint, resizeBounds } from "@/lib/utils";
 import { MAX_LAYER } from "@/config/toast-messages";
 import { LiveObject } from "@liveblocks/client";
 import { LayerPreview } from "./layerPreview";
+import { SelectionBox } from "./selection-box";
+import { SelectionTools } from "./selection-tools";
 
 
 
@@ -68,6 +70,51 @@ export const Canvas = ({ boardId }: CanvasProps) => {
 
     }, [lastUsedColor])
 
+    const translateSelectedLayers = useMutation(({ storage, self }, point: Point) => {
+        if (canvasState.mode !== CanvasMode.Translating) {
+            return;
+        }
+
+        const offSet = {
+            x: point.x - canvasState.current.x,
+            y: point.y - canvasState.current.y
+        };
+
+        const liveLayers = storage.get("layers");
+
+        for (const id of self.presence.selection) {
+            const layer = liveLayers.get(id);
+
+            if (layer) {
+                layer.update({
+                    x: layer.get("x") + offSet.x,
+                    y: layer.get("y") + offSet.y
+                })
+            }
+        }
+        setCanvasState({ mode: CanvasMode.Translating, current: point });
+    }, [canvasState]);
+
+    const unselectLayers = useMutation(({ self, setMyPresence }) => {
+        if (self.presence.selection.length > 0) {
+            setMyPresence({ selection: [] }, { addToHistory: true })
+        }
+    }, [])
+
+    const resizeSelectLayers = useMutation(({ storage, self }, point: Point) => {
+        if (canvasState.mode !== CanvasMode.Resizing) {
+            return;
+        }
+
+        const bounds = resizeBounds(canvasState.initialBounds, canvasState.corner, point)
+        const liveLayers = storage.get("layers");
+        const layer = liveLayers.get(self.presence.selection[0]);
+
+        if (layer) {
+            layer.update(bounds);
+        };
+    }, [canvasState])
+
 
     const onWheel = useCallback((e: React.WheelEvent) => {
         setCamera((camera) => ({
@@ -77,21 +124,49 @@ export const Canvas = ({ boardId }: CanvasProps) => {
 
         }));
 
+
     }, [])
 
     const onPointerMove = useMutation(({ setMyPresence }, e: React.PointerEvent) => {
         const current = pointerEventToCanvasPoint(e, camera);
 
-        setMyPresence({ cursor: current })
-    }, [])
+        if (canvasState.mode === CanvasMode.Translating) {
+            translateSelectedLayers(current);
+        } else if (canvasState.mode === CanvasMode.Resizing) {
+            resizeSelectLayers(current)
+        }
+
+        setMyPresence({ cursor: current });
+
+    }, [canvasState, resizeSelectLayers, camera, translateSelectedLayers])
 
     const onPointerLeave = useMutation(({ setMyPresence }) => {
 
         setMyPresence({ cursor: null })
     }, [])
 
+    const onPointerDown = useCallback((e: React.PointerEvent) => {
+        const point = pointerEventToCanvasPoint(e, camera);
+
+        if (canvasState.mode === CanvasMode.Inserting) {
+            return;
+        }
+
+        //
+
+        setCanvasState({ origin: point, mode: CanvasMode.Pressing })
+    }, [camera, canvasState.mode, setCanvasState])
+
     const onPointerUp = useMutation(({ }, e) => {
         const point = pointerEventToCanvasPoint(e, camera);
+
+        if (canvasState.mode === CanvasMode.None || canvasState.mode === CanvasMode.Pressing) {
+            unselectLayers();
+
+            setCanvasState({
+                mode: CanvasMode.None
+            });
+        }
 
         if (canvasState.mode === CanvasMode.Inserting) {
             insertlayer(canvasState.layerType, point)
@@ -103,7 +178,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
 
         history.resume();
     }, [
-        camera, canvasState, history, insertlayer
+        camera, canvasState, history, insertlayer, unselectLayers
     ])
 
     const selections = useOthersMapped((other) => other.presence.selection);
@@ -115,7 +190,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
             return;
         }
 
- 
+
         history.pause();
         e.stopPropagation();
 
@@ -142,6 +217,14 @@ export const Canvas = ({ boardId }: CanvasProps) => {
         return layerIdsColorSelection;
     }, [selections])
 
+    const onResizeHandlePointerDown = useCallback((corner: Side, initialBounds: XYWH) => {
+        history.pause();
+        setCanvasState({
+            mode: CanvasMode.Resizing,
+            initialBounds, corner
+        })
+    }, [])
+
 
     return (
         <main className="h-full w-full bg-netural-100 touch-none">
@@ -155,13 +238,16 @@ export const Canvas = ({ boardId }: CanvasProps) => {
                 undo={history?.undo}
                 redo={history?.redo}
             />
-            <svg className="h-[100vh] w-[100vw]" onPointerUp={onPointerUp} onWheel={onWheel} onPointerLeave={onPointerLeave} onPointerMove={onPointerMove}>
+            <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor}/>
+            <svg className="h-[100vh] w-[100vw]" onPointerUp={onPointerUp} onWheel={onWheel} onPointerLeave={onPointerLeave} onPointerMove={onPointerMove} onPointerDown={onPointerDown}>
                 <g style={{
                     transform: `translate(${camera.x}px, ${camera.y}px)`
                 }}>
                     {layerIds.map((layerId) => (
                         <LayerPreview key={layerId} id={layerId} onLayerPointerDown={onLayerPointerDown} selectionColor={layerIdsColorSelection[layerId]} />
                     ))}
+                    <SelectionBox onResizeHandlePointerDown={onResizeHandlePointerDown} />
+
                     <CursorPresence />
                 </g>
             </svg>

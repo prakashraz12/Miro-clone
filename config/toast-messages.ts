@@ -6,3 +6,4 @@ export const FAILED_TO_DELETE = "Failed to Delete!"
 
 
 export  const MAX_LAYER = 100;
+export const HANDLE_WIDTH = 8
