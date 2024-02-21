@@ -416,7 +416,7 @@ export const Canvas = ({ boardId }: CanvasProps) => {
                 corner,
             });
         },
-        []
+        [history]
     );
     const deleteLayers = useDeleteLays();
 

@@ -114,3 +114,5 @@ export const SelectionTools = memo(
     );
   }
 );
+
+SelectionTools.displayName = "SelectionTools";
